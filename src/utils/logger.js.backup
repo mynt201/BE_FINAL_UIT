@@ -1,0 +1,49 @@
+const pino = require('pino');
+const path = require('path');
+
+// Create logs directory if it doesn't exist
+const fs = require('fs');
+const logsDir = path.join(__dirname, '../../logs');
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
+
+// Configure pino logger
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  formatters: {
+    level: (label) => {
+      return { level: label };
+    },
+  },
+  timestamp: pino.stdTimeFunctions.isoTime,
+  serializers: {
+    req: pino.stdSerializers.req,
+    res: pino.stdSerializers.res,
+    err: pino.stdSerializers.err,
+  },
+}, pino.multistream([
+  // Console stream with pretty printing for development
+  {
+    level: 'debug',
+    stream: process.env.NODE_ENV === 'production'
+      ? process.stdout
+      : require('pino-pretty')({
+          colorize: true,
+          translateTime: 'SYS:standard',
+          ignore: 'pid,hostname',
+        })
+  },
+  // File stream for all logs
+  {
+    level: 'info',
+    stream: pino.destination(path.join(logsDir, 'all.log'))
+  },
+  // Separate error log
+  {
+    level: 'error',
+    stream: pino.destination(path.join(logsDir, 'error.log'))
+  }
+]));
+
+module.exports = logger;

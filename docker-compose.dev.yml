@@ -1,0 +1,81 @@
+# ======================================
+# Flood Risk Management - Development Docker Compose
+# ======================================
+
+version: '3.8'
+
+services:
+  # MongoDB Database (Development)
+  mongodb:
+    image: mongo:6.0
+    container_name: flood_risk_mongodb_dev
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: devpassword
+      MONGO_INITDB_DATABASE: flood_risk_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_dev_data:/data/db
+    networks:
+      - flood-risk-dev-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache (Development)
+  redis:
+    image: redis:7-alpine
+    container_name: flood_risk_redis_dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - flood-risk-dev-network
+    command: redis-server --appendonly yes
+
+  # Flood Risk Backend API (Development)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: flood_risk_api_dev
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      MONGODB_URI: mongodb://admin:devpassword@mongodb:27017/flood_risk_db?authSource=admin
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - flood-risk-dev-network
+    command: npm run dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mongodb_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+
+networks:
+  flood-risk-dev-network:
+    driver: bridge

@@ -1,0 +1,193 @@
+# ======================================
+# Azure DevOps Pipeline for Flood Risk Backend
+# ======================================
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - flood-risk-backend/*
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - flood-risk-backend/*
+
+variables:
+  - name: dockerRegistryServiceConnection
+    value: 'acr-connection'  # Update with your Azure Container Registry connection
+  - name: containerRegistry
+    value: 'floodriskacr.azurecr.io'  # Update with your ACR name
+  - name: imageRepository
+    value: 'flood-risk-backend'
+  - name: dockerfilePath
+    value: 'flood-risk-backend/Dockerfile'
+  - name: tag
+    value: '$(Build.BuildId)'
+
+stages:
+  # Build Stage
+  - stage: Build
+    displayName: 'Build Stage'
+    jobs:
+      - job: Build
+        displayName: 'Build and Test'
+        pool:
+          vmImage: 'ubuntu-latest'
+
+        steps:
+          # Checkout code
+          - checkout: self
+            clean: true
+
+          # Setup Node.js
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '18.x'
+
+          # Install dependencies
+          - script: |
+              cd flood-risk-backend
+              npm ci
+            displayName: 'Install dependencies'
+
+          # Run linting
+          - script: |
+              cd flood-risk-backend
+              npm run type-check
+            displayName: 'TypeScript type checking'
+
+          # Run tests
+          - script: |
+              cd flood-risk-backend
+              npm test
+            displayName: 'Run tests'
+            continueOnError: true
+
+          # Build application
+          - script: |
+              cd flood-risk-backend
+              npm run build
+            displayName: 'Build application'
+
+          # Build and push Docker image
+          - task: Docker@2
+            displayName: 'Build and push Docker image'
+            inputs:
+              command: buildAndPush
+              repository: $(imageRepository)
+              dockerfile: $(dockerfilePath)
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                $(tag)
+                latest
+
+          # Publish build artifacts
+          - publish: $(System.DefaultWorkingDirectory)/flood-risk-backend/dist
+            artifact: backend-dist
+            displayName: 'Publish build artifacts'
+
+  # Deploy to Development
+  - stage: DeployDev
+    displayName: 'Deploy to Development'
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+    jobs:
+      - deployment: DeployDev
+        displayName: 'Deploy to Dev Environment'
+        environment: 'development'
+        pool:
+          vmImage: 'ubuntu-latest'
+
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Download artifacts
+                - download: current
+                  artifact: backend-dist
+
+                # Deploy to Azure Web App (Linux)
+                - task: AzureWebAppContainer@1
+                  inputs:
+                    azureSubscription: 'azure-subscription'  # Update with your subscription
+                    appName: 'flood-risk-backend-dev'  # Update with your app name
+                    containers: $(containerRegistry)/$(imageRepository):$(tag)
+                    appSettings: |
+                      -DOCKER_REGISTRY_SERVER_URL https://$(containerRegistry)
+                      -NODE_ENV development
+                      -MONGODB_URI $(MONGODB_DEV_URI)
+                      -JWT_SECRET $(JWT_SECRET_DEV)
+                      -JWT_REFRESH_SECRET $(JWT_REFRESH_SECRET_DEV)
+
+  # Deploy to Production
+  - stage: DeployProd
+    displayName: 'Deploy to Production'
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployProd
+        displayName: 'Deploy to Production Environment'
+        environment: 'production'
+        pool:
+          vmImage: 'ubuntu-latest'
+
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Download artifacts
+                - download: current
+                  artifact: backend-dist
+
+                # Deploy to Azure Web App (Linux)
+                - task: AzureWebAppContainer@1
+                  inputs:
+                    azureSubscription: 'azure-subscription'  # Update with your subscription
+                    appName: 'flood-risk-backend-prod'  # Update with your app name
+                    containers: $(containerRegistry)/$(imageRepository):$(tag)
+                    appSettings: |
+                      -DOCKER_REGISTRY_SERVER_URL https://$(containerRegistry)
+                      -NODE_ENV production
+                      -MONGODB_URI $(MONGODB_PROD_URI)
+                      -JWT_SECRET $(JWT_SECRET_PROD)
+                      -JWT_REFRESH_SECRET $(JWT_REFRESH_SECRET_PROD)
+                      -REDIS_URL $(REDIS_URL_PROD)
+
+  # Security Scan
+  - stage: SecurityScan
+    displayName: 'Security Scanning'
+    dependsOn: Build
+    jobs:
+      - job: SecurityScan
+        displayName: 'Run Security Scans'
+        pool:
+          vmImage: 'ubuntu-latest'
+
+        steps:
+          # Run Trivy vulnerability scanner
+          - task: trivy@1
+            inputs:
+              image: $(containerRegistry)/$(imageRepository):$(tag)
+              format: 'sarif'
+              output: 'trivy-results.sarif'
+
+          # Publish security results
+          - task: PublishSecurityAnalysisLogs@3
+            inputs:
+              ArtifactName: 'SecurityScans'
+              ArtifactType: 'Container'
+
+          # Run dependency check
+          - script: |
+              cd flood-risk-backend
+              npm audit --audit-level high --production
+            displayName: 'NPM Audit'
+            continueOnError: true
