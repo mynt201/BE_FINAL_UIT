@@ -1,6 +1,3 @@
-import axios, { AxiosResponse } from 'axios';
-import { logger } from '../../utils/logger';
-
 interface WeatherData {
   location: {
     name: string;
@@ -124,151 +121,75 @@ interface WeatherData {
   };
 }
 
-interface WeatherAPIError {
-  error: {
-    code: number;
-    message: string;
-  };
-}
-
 class WeatherAPIService {
   private apiKey: string;
   private baseUrl: string;
-  private cache: Map<string, { data: WeatherData; timestamp: number }> = new Map();
-  private readonly CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+  private cache: Map<string, { data: any; timestamp: number }>;
+  private readonly CACHE_DURATION: number = 30 * 60 * 1000; // 30 minutes
 
   constructor() {
     this.apiKey = process.env.WEATHER_API_KEY || '';
-    this.baseUrl = 'http://api.weatherapi.com/v1';
-
-    if (!this.apiKey) {
-      logger.warn('Weather API key not configured. Weather services will not work.');
-    }
+    this.baseUrl = 'https://api.weatherapi.com/v1';
+    this.cache = new Map();
   }
 
-  /**
-   * Get current weather for a location
-   */
   async getCurrentWeather(location: string): Promise<WeatherData | null> {
     try {
-      if (!this.apiKey) {
-        throw new Error('Weather API key not configured');
+      const url = `${this.baseUrl}/current.json?key=${this.apiKey}&q=${encodeURIComponent(
+        location
+      )}&aqi=no`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Weather API error: ${response.status}`);
       }
 
-      const cacheKey = `current_${location}`;
-      const cached = this.getCachedData(cacheKey);
-      if (cached) {
-        return cached;
-      }
-
-      const url = `${this.baseUrl}/current.json`;
-      const params = {
-        key: this.apiKey,
-        q: location,
-        aqi: 'yes'
-      };
-
-      logger.info(`Fetching current weather for location: ${location}`);
-      const response: AxiosResponse<WeatherData> = await axios.get(url, { params });
-
-      this.setCachedData(cacheKey, response.data);
-      return response.data;
-
-    } catch (error: any) {
-      logger.error(`Error fetching current weather for ${location}:`, error.message);
-
-      if (error.response?.data?.error) {
-        const apiError = error.response.data as WeatherAPIError;
-        logger.error(`Weather API Error: ${apiError.error.code} - ${apiError.error.message}`);
-      }
-
+      const data = (await response.json()) as WeatherData;
+      return data;
+    } catch (error) {
+      console.error('Error fetching current weather:', error);
       return null;
     }
   }
 
-  /**
-   * Get weather forecast for a location
-   */
   async getWeatherForecast(location: string, days: number = 7): Promise<WeatherData | null> {
     try {
-      if (!this.apiKey) {
-        throw new Error('Weather API key not configured');
+      const url = `${this.baseUrl}/forecast.json?key=${this.apiKey}&q=${encodeURIComponent(
+        location
+      )}&days=${days}&aqi=no&alerts=no`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Weather API error: ${response.status}`);
       }
 
-      if (days < 1 || days > 10) {
-        throw new Error('Forecast days must be between 1 and 10');
-      }
-
-      const cacheKey = `forecast_${location}_${days}`;
-      const cached = this.getCachedData(cacheKey);
-      if (cached) {
-        return cached;
-      }
-
-      const url = `${this.baseUrl}/forecast.json`;
-      const params = {
-        key: this.apiKey,
-        q: location,
-        days: days,
-        aqi: 'yes',
-        alerts: 'yes'
-      };
-
-      logger.info(`Fetching ${days}-day forecast for location: ${location}`);
-      const response: AxiosResponse<WeatherData> = await axios.get(url, { params });
-
-      this.setCachedData(cacheKey, response.data);
-      return response.data;
-
-    } catch (error: any) {
-      logger.error(`Error fetching forecast for ${location}:`, error.message);
-
-      if (error.response?.data?.error) {
-        const apiError = error.response.data as WeatherAPIError;
-        logger.error(`Weather API Error: ${apiError.error.code} - ${apiError.error.message}`);
-      }
-
+      const data = (await response.json()) as WeatherData;
+      return data;
+    } catch (error) {
+      console.error('Error fetching weather forecast:', error);
       return null;
     }
   }
 
-  /**
-   * Get historical weather data
-   */
   async getHistoricalWeather(location: string, date: string): Promise<WeatherData | null> {
     try {
-      if (!this.apiKey) {
-        throw new Error('Weather API key not configured');
+      const url = `${this.baseUrl}/history.json?key=${this.apiKey}&q=${encodeURIComponent(
+        location
+      )}&dt=${date}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Weather API error: ${response.status}`);
       }
 
-      const cacheKey = `historical_${location}_${date}`;
-      const cached = this.getCachedData(cacheKey);
-      if (cached) {
-        return cached;
-      }
-
-      const url = `${this.baseUrl}/history.json`;
-      const params = {
-        key: this.apiKey,
-        q: location,
-        dt: date
-      };
-
-      logger.info(`Fetching historical weather for ${location} on ${date}`);
-      const response: AxiosResponse<WeatherData> = await axios.get(url, { params });
-
-      this.setCachedData(cacheKey, response.data);
-      return response.data;
-
-    } catch (error: any) {
-      logger.error(`Error fetching historical weather for ${location}:`, error.message);
+      const data = (await response.json()) as WeatherData;
+      return data;
+    } catch (error) {
+      console.error('Error fetching historical weather:', error);
       return null;
     }
   }
 
-  /**
-   * Search for locations
-   */
   async searchLocations(query: string): Promise<Array<{
     id: number;
     name: string;
@@ -279,220 +200,113 @@ class WeatherAPIService {
     url: string;
   }> | null> {
     try {
-      if (!this.apiKey) {
-        throw new Error('Weather API key not configured');
+      const url = `${this.baseUrl}/search.json?key=${this.apiKey}&q=${encodeURIComponent(query)}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Weather API error: ${response.status}`);
       }
 
-      const url = `${this.baseUrl}/search.json`;
-      const params = {
-        key: this.apiKey,
-        q: query
-      };
-
-      logger.info(`Searching locations for query: ${query}`);
-      const response: AxiosResponse<any[]> = await axios.get(url, { params });
-
-      return response.data.map((location: any) => ({
-        id: location.id,
-        name: location.name,
-        region: location.region,
-        country: location.country,
-        lat: parseFloat(location.lat),
-        lon: parseFloat(location.lon),
-        url: location.url
-      }));
-
-    } catch (error: any) {
-      logger.error(`Error searching locations for ${query}:`, error.message);
+      const data = (await response.json()) as Array<{
+        id: number;
+        name: string;
+        region: string;
+        country: string;
+        lat: number;
+        lon: number;
+        url: string;
+      }>;
+      return data;
+    } catch (error) {
+      console.error('Error searching locations:', error);
       return null;
     }
   }
 
-  /**
-   * Get weather alerts for a location
-   */
   async getWeatherAlerts(location: string): Promise<any> {
-    try {
-      if (!this.apiKey) {
-        throw new Error('Weather API key not configured');
-      }
-
-      const forecastData = await this.getWeatherForecast(location, 1);
-      if (!forecastData?.forecast?.forecastday[0]?.hour) {
-        return null;
-      }
-
-      // Analyze weather data for flood risk alerts
-      const today = forecastData.forecast.forecastday[0];
-      const alerts: any[] = [];
-
-      // Heavy rain alert
-      if (today.day.totalprecip_mm > 50) {
-        alerts.push({
-          type: 'heavy_rain',
-          severity: 'high',
-          message: `Heavy rainfall expected: ${today.day.totalprecip_mm}mm`,
-          period: today.date
-        });
-      } else if (today.day.totalprecip_mm > 20) {
-        alerts.push({
-          type: 'moderate_rain',
-          severity: 'medium',
-          message: `Moderate rainfall expected: ${today.day.totalprecip_mm}mm`,
-          period: today.date
-        });
-      }
-
-      // High humidity alert
-      if (today.day.avghumidity > 90) {
-        alerts.push({
-          type: 'high_humidity',
-          severity: 'medium',
-          message: `High humidity expected: ${today.day.avghumidity}%`,
-          period: today.date
-        });
-      }
-
-      return {
-        location: forecastData.location,
-        alerts: alerts,
-        last_updated: forecastData.current.last_updated
-      };
-
-    } catch (error: any) {
-      logger.error(`Error getting weather alerts for ${location}:`, error.message);
-      return null;
-    }
+    // Stub implementation
+    return null;
   }
 
-  /**
-   * Calculate flood risk based on weather data
-   */
+  async getHydroData(location: string): Promise<any> {
+    // Stub implementation for hydrological data
+    return null;
+  }
+
   calculateFloodRisk(weatherData: WeatherData): {
     risk_level: 'low' | 'medium' | 'high' | 'very_high';
     risk_score: number;
     factors: string[];
     recommendation: string;
   } {
-    let riskScore = 0;
+    // Simple flood risk calculation based on rainfall and humidity
+    const rainfall = weatherData.current.precip_mm;
+    const humidity = weatherData.current.humidity;
+
+    let risk_score = 0;
     const factors: string[] = [];
 
-    if (!weatherData.current && !weatherData.forecast) {
-      return {
-        risk_level: 'low',
-        risk_score: 0,
-        factors: ['No weather data available'],
-        recommendation: 'Unable to assess flood risk'
-      };
+    if (rainfall > 50) {
+      risk_score += 3;
+      factors.push('Heavy rainfall');
+    } else if (rainfall > 25) {
+      risk_score += 2;
+      factors.push('Moderate rainfall');
+    } else if (rainfall > 10) {
+      risk_score += 1;
+      factors.push('Light rainfall');
     }
 
-    // Current conditions
-    const current = weatherData.current;
-    if (current) {
-      // Heavy rain increases risk
-      if (current.precip_mm > 10) {
-        riskScore += 30;
-        factors.push(`Heavy current rainfall: ${current.precip_mm}mm`);
-      } else if (current.precip_mm > 5) {
-        riskScore += 15;
-        factors.push(`Moderate current rainfall: ${current.precip_mm}mm`);
-      }
-
-      // High humidity contributes to risk
-      if (current.humidity > 90) {
-        riskScore += 10;
-        factors.push(`Very high humidity: ${current.humidity}%`);
-      } else if (current.humidity > 80) {
-        riskScore += 5;
-        factors.push(`High humidity: ${current.humidity}%`);
-      }
-
-      // Wind can affect water levels
-      if (current.wind_kph > 30) {
-        riskScore += 5;
-        factors.push(`Strong wind: ${current.wind_kph}km/h`);
-      }
+    if (humidity > 90) {
+      risk_score += 2;
+      factors.push('Very high humidity');
+    } else if (humidity > 80) {
+      risk_score += 1;
+      factors.push('High humidity');
     }
 
-    // Forecast conditions
-    if (weatherData.forecast?.forecastday) {
-      for (const day of weatherData.forecast.forecastday.slice(0, 3)) { // Next 3 days
-        // Heavy forecasted rain
-        if (day.day.totalprecip_mm > 30) {
-          riskScore += 25;
-          factors.push(`Heavy rain forecast (${day.date}): ${day.day.totalprecip_mm}mm`);
-        } else if (day.day.totalprecip_mm > 15) {
-          riskScore += 10;
-          factors.push(`Moderate rain forecast (${day.date}): ${day.day.totalprecip_mm}mm`);
-        }
-
-        // High chance of rain
-        if (day.day.daily_chance_of_rain > 80) {
-          riskScore += 15;
-          factors.push(`High chance of rain (${day.date}): ${day.day.daily_chance_of_rain}%`);
-        } else if (day.day.daily_chance_of_rain > 60) {
-          riskScore += 7;
-          factors.push(`Moderate chance of rain (${day.date}): ${day.day.daily_chance_of_rain}%`);
-        }
-      }
-    }
-
-    // Determine risk level
-    let riskLevel: 'low' | 'medium' | 'high' | 'very_high';
+    let risk_level: 'low' | 'medium' | 'high' | 'very_high';
     let recommendation: string;
 
-    if (riskScore >= 60) {
-      riskLevel = 'very_high';
-      recommendation = 'Immediate flood preparedness required. Monitor weather closely and follow evacuation instructions if issued.';
-    } else if (riskScore >= 30) {
-      riskLevel = 'high';
-      recommendation = 'High flood risk. Prepare emergency kit, monitor weather updates, and be ready to evacuate if necessary.';
-    } else if (riskScore >= 15) {
-      riskLevel = 'medium';
-      recommendation = 'Moderate flood risk. Stay informed about weather conditions and local flood warnings.';
+    if (risk_score >= 4) {
+      risk_level = 'very_high';
+      recommendation =
+        'High flood risk. Take immediate precautions and monitor water levels closely.';
+    } else if (risk_score >= 3) {
+      risk_level = 'high';
+      recommendation = 'Elevated flood risk. Prepare emergency supplies and stay alert.';
+    } else if (risk_score >= 2) {
+      risk_level = 'medium';
+      recommendation = 'Moderate flood risk. Keep updated with weather reports.';
     } else {
-      riskLevel = 'low';
-      recommendation = 'Low flood risk. Continue normal activities but stay aware of weather changes.';
+      risk_level = 'low';
+      recommendation = 'Low flood risk. Normal activities can continue.';
     }
 
     return {
-      risk_level: riskLevel,
-      risk_score: Math.min(riskScore, 100),
-      factors: factors.length > 0 ? factors : ['No significant risk factors identified'],
-      recommendation
+      risk_level,
+      risk_score,
+      factors,
+      recommendation,
     };
   }
 
-  private getCachedData(key: string): WeatherData | null {
+  private getCachedData(key: string): any | null {
     const cached = this.cache.get(key);
-    if (cached && (Date.now() - cached.timestamp) < this.CACHE_DURATION) {
+    if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
       return cached.data;
     }
-    if (cached) {
-      this.cache.delete(key);
-    }
+    this.cache.delete(key);
     return null;
   }
 
-  private setCachedData(key: string, data: WeatherData): void {
+  private setCachedData(key: string, data: any): void {
     this.cache.set(key, { data, timestamp: Date.now() });
-
-    // Clean up old cache entries (keep cache size manageable)
-    if (this.cache.size > 100) {
-      const oldestKey = this.cache.keys().next().value;
-      if (oldestKey) {
-        this.cache.delete(oldestKey);
-      }
-    }
   }
 
-  /**
-   * Clear cache (useful for testing or manual refresh)
-   */
   clearCache(): void {
     this.cache.clear();
-    logger.info('Weather API cache cleared');
   }
 }
 
-export default new WeatherAPIService();
+export default WeatherAPIService;

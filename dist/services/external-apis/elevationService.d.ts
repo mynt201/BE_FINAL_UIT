@@ -46,6 +46,5 @@ declare class ElevationService {
     private setCachedData;
     clearCache(): void;
 }
-declare const _default: ElevationService;
-export default _default;
+export default ElevationService;
 //# sourceMappingURL=elevationService.d.ts.map

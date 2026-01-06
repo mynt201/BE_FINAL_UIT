@@ -1,5 +1,6 @@
+import { ObjectId } from 'mongoose';
 export interface IUser {
-    _id: string;
+    _id: ObjectId | string;
     username: string;
     email: string;
     password?: string;
@@ -44,7 +45,7 @@ export interface ILoginRequest {
 export interface IRegisterRequest extends ICreateUserRequest {
 }
 export interface IAuthResponse {
-    user: Omit<IUser, 'password'>;
+    user: Omit<IUser, 'password' | 'refreshTokens'>;
     tokens: {
         accessToken: string;
         refreshToken: string;

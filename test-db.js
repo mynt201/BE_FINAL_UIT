@@ -1,60 +1,80 @@
-// Simple database connection and seeding test
 const mongoose = require('mongoose');
+require('dotenv').config();
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/flood-risk-db';
+console.log('🧪 Testing MongoDB Connection...\n');
 
-async function testDatabase() {
-  try {
-    console.log('🔌 Connecting to MongoDB...');
-    await mongoose.connect(MONGO_URI);
-    console.log('✅ Connected to MongoDB successfully!');
+// Kiểm tra environment variables
+console.log('📋 Environment Check:');
+console.log('MONGODB_URI:', process.env.MONGODB_URI ? '✅ Set' : '❌ Not set');
+console.log('NODE_ENV:', process.env.NODE_ENV || 'development');
+console.log('');
 
-    // Get database info
-    const db = mongoose.connection.db;
-    const collections = await db.listCollections().toArray();
+const testConnection = async () => {
+    try {
+        const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/flood-risk-db';
 
-    console.log('📊 Database Info:');
-    console.log(`   Database: ${db.databaseName}`);
-    console.log(`   Collections: ${collections.length}`);
-    console.log('   Collections:', collections.map(c => c.name).join(', ') || 'None');
+        console.log('🔌 Attempting to connect to:', mongoURI.replace(/\/\/.*@/, '//***:***@'));
 
-    // Count documents in each collection
-    for (const collection of collections) {
-      const count = await db.collection(collection.name).countDocuments();
-      console.log(`   ${collection.name}: ${count} documents`);
+        const options = {
+            serverSelectionTimeoutMS: 5000,
+            socketTimeoutMS: 45000,
+        };
+
+        const conn = await mongoose.connect(mongoURI, options);
+
+        console.log('✅ Connection successful!');
+        console.log('📍 Host:', conn.connection.host);
+        console.log('📊 Database:', conn.connection.name);
+        console.log('🔗 State:', mongoose.connection.readyState);
+
+        // Test tạo collection
+        console.log('\n📝 Testing database operations...');
+
+        // Tạo schema test
+        const testSchema = new mongoose.Schema({
+            name: String,
+            timestamp: { type: Date, default: Date.now }
+        });
+
+        // Tạo model (sẽ không tạo collection thực sự cho đến khi insert)
+        const TestModel = mongoose.model('TestConnection', testSchema, 'test_connections');
+
+        // Insert document test
+        const testDoc = new TestModel({ name: 'Connection Test' });
+        await testDoc.save();
+
+        console.log('✅ Database write test successful');
+
+        // Read test
+        const docs = await TestModel.find({ name: 'Connection Test' }).limit(1);
+        console.log('✅ Database read test successful');
+
+        // Cleanup
+        await TestModel.deleteMany({ name: 'Connection Test' });
+        console.log('🧹 Cleanup completed');
+
+        console.log('\n🎉 All database tests passed!');
+
+    } catch (error) {
+        console.error('\n❌ Database test failed:');
+        console.error('Error:', error.message);
+        console.error('Code:', error.code);
+        console.error('CodeName:', error.codeName);
+
+        console.log('\n🔍 Troubleshooting:');
+        console.log('1. Kiểm tra MongoDB có chạy không: mongod --version');
+        console.log('2. Kiểm tra MongoDB service: net start MongoDB (Windows)');
+        console.log('3. Kiểm tra port 27017: telnet localhost 27017');
+        console.log('4. Hoặc sử dụng MongoDB Atlas cloud');
+
+    } finally {
+        // Đóng kết nối
+        await mongoose.connection.close();
+        console.log('\n🔌 Connection closed');
+        process.exit(0);
     }
+};
 
-    await mongoose.disconnect();
-    console.log('🔌 Disconnected from MongoDB');
+// Chạy test
+testConnection();
 
-  } catch (error) {
-    console.error('❌ Database test failed:', error.message);
-    process.exit(1);
-  }
-}
-
-// Run seeding if requested
-async function runSeeding() {
-  try {
-    console.log('🌱 Running database seeding...');
-
-    // Simple seeding - just create admin user
-    const User = require('./src/models/User.ts'); // This won't work, but shows concept
-
-    console.log('⚠️  Note: Seeding requires TypeScript models to be compiled first');
-    console.log('   Run: npm run build');
-    console.log('   Then: npm run seed');
-
-  } catch (error) {
-    console.error('❌ Seeding failed:', error.message);
-  }
-}
-
-// Main execution
-const command = process.argv[2];
-
-if (command === 'seed') {
-  runSeeding();
-} else {
-  testDatabase();
-}

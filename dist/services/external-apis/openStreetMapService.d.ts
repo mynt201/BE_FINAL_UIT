@@ -1,7 +1,7 @@
 interface InfrastructureFeature {
     id: string;
     type: 'river' | 'road' | 'railway' | 'building' | 'water_body' | 'drainage';
-    name?: string | undefined;
+    name?: string;
     coordinates: Array<[number, number]>;
     properties: Record<string, any>;
     osm_tags: Record<string, string>;
@@ -35,50 +35,18 @@ declare class OpenStreetMapService {
         name: string;
         display_name: string;
         boundingbox: string[];
-    }> | null>;
-    getInfrastructureData(minLat: number, minLng: number, maxLat: number, maxLng: number): Promise<FloodInfrastructure | null>;
-    getRiverData(riverName?: string, bbox?: [number, number, number, number]): Promise<InfrastructureFeature[]>;
-    getRoadNetwork(bbox: [number, number, number, number]): Promise<InfrastructureFeature[]>;
-    getBuildings(bbox: [number, number, number, number]): Promise<InfrastructureFeature[]>;
-    analyzeFloodVulnerability(infrastructure: FloodInfrastructure): {
-        vulnerability_score: number;
-        risk_factors: string[];
+    }>>;
+    getInfrastructureData(bbox: [number, number, number, number], types?: string[]): Promise<FloodInfrastructure>;
+    getFloodRiskInfrastructure(latitude: number, longitude: number, radiusKm?: number): Promise<FloodInfrastructure>;
+    analyzeFloodInfrastructure(infrastructure: FloodInfrastructure): {
+        flood_risk_score: number;
+        vulnerable_elements: string[];
+        protective_elements: string[];
         recommendations: string[];
-        affected_infrastructure: {
-            high_risk_count: number;
-            medium_risk_count: number;
-            low_risk_count: number;
-        };
     };
-    reverseGeocode(lat: number, lng: number): Promise<{
-        place_id: number;
-        osm_id: number;
-        osm_type: string;
-        licence: string;
-        lat: string;
-        lon: string;
-        display_name: string;
-        address?: {
-            house_number?: string;
-            road?: string;
-            suburb?: string;
-            city?: string;
-            county?: string;
-            state?: string;
-            postcode?: string;
-            country?: string;
-            country_code?: string;
-        };
-    } | null>;
-    private parseInfrastructureData;
-    private parseElementsToFeatures;
-    private wayToFeature;
-    private calculateWayLength;
-    private toRadians;
-    private getCachedData;
-    private setCachedData;
+    getAddressDetails(latitude: number, longitude: number): Promise<any>;
+    analyzeFloodVulnerability(infrastructure: FloodInfrastructure): Promise<any>;
     clearCache(): void;
 }
-declare const _default: OpenStreetMapService;
-export default _default;
+export default OpenStreetMapService;
 //# sourceMappingURL=openStreetMapService.d.ts.map

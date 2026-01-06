@@ -1,6 +1,9 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const mongoose_1 = require("mongoose");
+const mongoose_1 = __importDefault(require("mongoose"));
 const weatherSchema = new mongoose_1.default.Schema({
     date: {
         type: Date,
@@ -89,13 +92,16 @@ const weatherSchema = new mongoose_1.default.Schema({
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
 });
+// Compound indexes for better performance
 weatherSchema.index({ date: 1, 'location.ward_id': 1 });
 weatherSchema.index({ 'location.ward_name': 1, date: -1 });
 weatherSchema.index({ rainfall: -1, date: -1 });
 weatherSchema.index({ source: 1, date: -1 });
+// Virtual for temperature range
 weatherSchema.virtual('temperatureRange').get(function () {
     return this.temperature.max - this.temperature.min;
 });
+// Virtual for weather severity based on rainfall
 weatherSchema.virtual('rainSeverity').get(function () {
     if (this.rainfall >= 100)
         return 'extreme';
@@ -107,6 +113,7 @@ weatherSchema.virtual('rainSeverity').get(function () {
         return 'light';
     return 'none';
 });
+// Static method to get weather by date range
 weatherSchema.statics.getByDateRange = function (startDate, endDate, wardId = null) {
     const query = {
         date: { $gte: startDate, $lte: endDate },
@@ -116,6 +123,7 @@ weatherSchema.statics.getByDateRange = function (startDate, endDate, wardId = nu
     }
     return this.find(query).sort({ date: 1 });
 };
+// Static method to get rainfall statistics
 weatherSchema.statics.getRainfallStats = async function (startDate, endDate, wardId = null) {
     const matchStage = {
         date: { $gte: startDate, $lte: endDate },
@@ -144,6 +152,7 @@ weatherSchema.statics.getRainfallStats = async function (startDate, endDate, war
     ]);
     return stats;
 };
+// Static method to get latest weather data
 weatherSchema.statics.getLatest = function (wardId = null, limit = 1) {
     const query = {};
     if (wardId) {

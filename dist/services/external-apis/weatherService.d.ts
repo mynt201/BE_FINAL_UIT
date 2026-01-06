@@ -139,6 +139,7 @@ declare class WeatherAPIService {
         url: string;
     }> | null>;
     getWeatherAlerts(location: string): Promise<any>;
+    getHydroData(location: string): Promise<any>;
     calculateFloodRisk(weatherData: WeatherData): {
         risk_level: 'low' | 'medium' | 'high' | 'very_high';
         risk_score: number;
@@ -149,6 +150,5 @@ declare class WeatherAPIService {
     private setCachedData;
     clearCache(): void;
 }
-declare const _default: WeatherAPIService;
-export default _default;
+export default WeatherAPIService;
 //# sourceMappingURL=weatherService.d.ts.map

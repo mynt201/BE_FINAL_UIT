@@ -1,6 +1,9 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const mongoose_1 = require("mongoose");
+const mongoose_1 = __importDefault(require("mongoose"));
 const riskIndexSchema = new mongoose_1.default.Schema({
     ward_id: {
         type: String,
@@ -22,6 +25,7 @@ const riskIndexSchema = new mongoose_1.default.Schema({
         enum: ['daily', 'weekly', 'monthly', 'yearly'],
         required: [true, 'Please add calculation period'],
     },
+    // Risk calculation components
     exposure: {
         type: Number,
         required: [true, 'Please add exposure value'],
@@ -37,17 +41,20 @@ const riskIndexSchema = new mongoose_1.default.Schema({
         required: [true, 'Please add resilience value'],
         min: [0, 'Resilience cannot be negative'],
     },
+    // Final risk score
     risk_score: {
         type: Number,
         required: [true, 'Please add risk score'],
         min: [0, 'Risk score cannot be negative'],
         max: [5, 'Risk score cannot exceed 5'],
     },
+    // Risk level classification
     risk_level: {
         type: String,
         enum: ['very_low', 'low', 'medium', 'high', 'very_high'],
         required: [true, 'Please add risk level'],
     },
+    // Contributing factors
     factors: {
         population_density: Number,
         low_elevation: Number,
@@ -57,6 +64,7 @@ const riskIndexSchema = new mongoose_1.default.Schema({
         water_level: Number,
         weather_condition: String,
     },
+    // Risk trend (compared to previous period)
     trend: {
         previous_score: Number,
         change_percentage: Number,
@@ -65,10 +73,12 @@ const riskIndexSchema = new mongoose_1.default.Schema({
             enum: ['increasing', 'decreasing', 'stable'],
         },
     },
+    // Geographic data
     coordinates: {
         latitude: Number,
         longitude: Number,
     },
+    // Metadata
     calculation_method: {
         type: String,
         enum: ['standard', 'advanced', 'custom'],
@@ -93,10 +103,12 @@ const riskIndexSchema = new mongoose_1.default.Schema({
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
 });
+// Indexes for better performance
 riskIndexSchema.index({ ward_id: 1, calculation_date: -1 });
 riskIndexSchema.index({ risk_level: 1, calculation_date: -1 });
 riskIndexSchema.index({ period: 1, calculation_date: -1 });
 riskIndexSchema.index({ risk_score: -1 });
+// Virtual for risk level description
 riskIndexSchema.virtual('riskLevelDescription').get(function () {
     const descriptions = {
         very_low: 'Rủi ro rất thấp',
@@ -107,6 +119,7 @@ riskIndexSchema.virtual('riskLevelDescription').get(function () {
     };
     return descriptions[this.risk_level] || 'Không xác định';
 });
+// Pre-save middleware to calculate risk level from score
 riskIndexSchema.pre('save', function (next) {
     if (this.isModified('risk_score')) {
         if (this.risk_score >= 4.0) {
@@ -127,6 +140,7 @@ riskIndexSchema.pre('save', function (next) {
     }
     next();
 });
+// Static method to get latest risk index for a ward
 riskIndexSchema.statics.getLatestByWard = function (wardId, period = null) {
     const query = { ward_id: wardId, is_active: true };
     if (period) {
@@ -134,6 +148,7 @@ riskIndexSchema.statics.getLatestByWard = function (wardId, period = null) {
     }
     return this.findOne(query).sort({ calculation_date: -1 });
 };
+// Static method to get risk distribution
 riskIndexSchema.statics.getRiskDistribution = async function (startDate, endDate, period = null) {
     const matchStage = {
         calculation_date: { $gte: startDate, $lte: endDate },
@@ -157,6 +172,7 @@ riskIndexSchema.statics.getRiskDistribution = async function (startDate, endDate
     ]);
     return distribution;
 };
+// Static method to get risk trends
 riskIndexSchema.statics.getRiskTrends = async function (wardId, startDate, endDate, period = 'daily') {
     const trends = await this.aggregate([
         {
@@ -186,8 +202,10 @@ riskIndexSchema.statics.getRiskTrends = async function (wardId, startDate, endDa
     ]);
     return trends;
 };
+// Instance method to calculate trend
 riskIndexSchema.methods.calculateTrend = async function () {
     const RiskIndex = this.constructor;
+    // Find previous record for same ward and period
     const previousRecord = await RiskIndex
         .findOne({
         ward_id: this.ward_id,

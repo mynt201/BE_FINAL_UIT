@@ -5,14 +5,12 @@
  * Test tất cả external APIs integration
  */
 
-import * as dotenv from 'dotenv';
-dotenv.config();
-
-import weatherService from '../src/services/external-apis/weatherService';
-import elevationService from '../src/services/external-apis/elevationService';
-import openStreetMapService from '../src/services/external-apis/openStreetMapService';
-import vietnamGovService from '../src/services/external-apis/vietnamGovService';
-import floodRiskAssessmentService from '../src/services/external-apis/floodRiskAssessmentService';
+require('dotenv').config();
+const weatherService = require('../src/services/external-apis/weatherService').default;
+const elevationService = require('../src/services/external-apis/elevationService').default;
+const openStreetMapService = require('../src/services/external-apis/openStreetMapService').default;
+const vietnamGovService = require('../src/services/external-apis/vietnamGovService').default;
+const floodRiskAssessmentService = require('../src/services/external-apis/floodRiskAssessmentService').default;
 
 async function testWeatherAPI() {
   console.log('\n🌤️ Testing Weather API...');
@@ -38,7 +36,7 @@ async function testWeatherAPI() {
       console.log('❌ Weather forecast: Failed');
     }
 
-  } catch (error: any) {
+  } catch (error) {
     console.log('❌ Weather API test failed:', error.message);
   }
 }
@@ -66,7 +64,7 @@ async function testElevationAPI() {
       console.log('❌ Flood risk factors: Failed');
     }
 
-  } catch (error: any) {
+  } catch (error) {
     console.log('❌ Elevation API test failed:', error.message);
   }
 }
@@ -80,13 +78,13 @@ async function testOpenStreetMapAPI() {
     if (locations && locations.length > 0) {
       console.log('✅ Location search: OK');
       console.log(`   Found ${locations.length} locations`);
-      console.log(`   First result: ${locations[0]?.display_name || 'Unknown'}`);
+      console.log(`   First result: ${locations[0].display_name}`);
     } else {
       console.log('❌ Location search: Failed');
     }
 
     // Test infrastructure data (small bbox around Hanoi center)
-    const bbox: [number, number, number, number] = [105.8, 21.0, 105.9, 21.05]; // Small area for testing
+    const bbox = [105.8, 21.0, 105.9, 21.05]; // Small area for testing
     const infrastructure = await openStreetMapService.getInfrastructureData(...bbox);
     if (infrastructure) {
       console.log('✅ Infrastructure data: OK');
@@ -97,7 +95,7 @@ async function testOpenStreetMapAPI() {
       console.log('❌ Infrastructure data: Failed');
     }
 
-  } catch (error: any) {
+  } catch (error) {
     console.log('❌ OpenStreetMap API test failed:', error.message);
   }
 }
@@ -128,7 +126,7 @@ async function testVietnamGovernmentAPI() {
       console.log('❌ Disaster history: Failed');
     }
 
-  } catch (error: any) {
+  } catch (error) {
     console.log('❌ Vietnam Government API test failed:', error.message);
   }
 }
@@ -165,7 +163,7 @@ async function testFloodRiskAssessment() {
       console.log('❌ Flood alerts: Failed');
     }
 
-  } catch (error: any) {
+  } catch (error) {
     console.log('❌ Flood risk assessment test failed:', error.message);
   }
 }
@@ -207,4 +205,4 @@ if (require.main === module) {
   });
 }
 
-export { runTests };
+module.exports = { runTests };

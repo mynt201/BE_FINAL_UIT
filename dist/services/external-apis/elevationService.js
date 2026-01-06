@@ -1,233 +1,144 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const axios_1 = require("axios");
-const logger_1 = require("../../utils/logger");
 class ElevationService {
-    openElevationUrl;
-    cache = new Map();
-    CACHE_DURATION = 24 * 60 * 60 * 1000;
     constructor() {
+        this.CACHE_DURATION = 60 * 60 * 1000; // 1 hour
         this.openElevationUrl = 'https://api.open-elevation.com/api/v1/lookup';
+        this.cache = new Map();
     }
     async getElevation(latitude, longitude) {
         try {
-            const elevations = await this.getElevations([{ latitude, longitude }]);
-            return elevations.length > 0 ? elevations[0]?.elevation ?? null : null;
+            const points = [{ latitude, longitude }];
+            const elevations = await this.getElevations(points);
+            return elevations.length > 0 ? elevations[0].elevation : null;
         }
         catch (error) {
-            logger_1.logger.error(`Error getting elevation for (${latitude}, ${longitude}):`, error.message);
+            console.error('Error getting elevation:', error);
             return null;
         }
     }
     async getElevations(points) {
         try {
-            if (points.length === 0) {
-                return [];
-            }
-            const cacheKey = this.generateCacheKey(points);
-            const cached = this.getCachedData(cacheKey);
-            if (cached) {
-                return cached;
-            }
             const locations = points.map(point => `${point.latitude},${point.longitude}`).join('|');
-            const params = {
-                locations: locations
-            };
-            logger_1.logger.info(`Fetching elevation data for ${points.length} points`);
-            const response = await axios_1.default.get(this.openElevationUrl, { params });
-            if (!response.data?.results) {
-                throw new Error('Invalid response from elevation API');
+            const url = `${this.openElevationUrl}?locations=${locations}`;
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Elevation API error: ${response.status}`);
             }
-            const elevationData = response.data.results.map((result, index) => ({
-                latitude: points[index]?.latitude || 0,
-                longitude: points[index]?.longitude || 0,
+            const data = await response.json();
+            return data.results.map((result, index) => ({
+                latitude: points[index].latitude,
+                longitude: points[index].longitude,
                 elevation: result.elevation
             }));
-            this.setCachedData(cacheKey, elevationData);
-            return elevationData;
         }
         catch (error) {
-            logger_1.logger.error(`Error fetching elevation data:`, error.message);
-            if (error.response?.status === 429) {
-                logger_1.logger.warn('Elevation API rate limit exceeded');
-            }
-            else if (error.response?.status === 400) {
-                logger_1.logger.warn('Invalid coordinates provided to elevation API');
-            }
+            console.error('Error getting elevations:', error);
             return [];
         }
     }
-    async getElevationProfile(startLat, startLng, endLat, endLng, numPoints = 20) {
-        try {
-            const points = [];
-            for (let i = 0; i < numPoints; i++) {
-                const fraction = i / (numPoints - 1);
-                const lat = startLat + (endLat - startLat) * fraction;
-                const lng = startLng + (endLng - startLng) * fraction;
-                points.push({ latitude: lat, longitude: lng });
-            }
-            return await this.getElevations(points);
+    async getElevationProfile(startLat, startLng, endLat, endLng, numPoints = 10) {
+        const points = [];
+        for (let i = 0; i < numPoints; i++) {
+            const fraction = i / (numPoints - 1);
+            const lat = startLat + (endLat - startLat) * fraction;
+            const lng = startLng + (endLng - startLng) * fraction;
+            points.push({ latitude: lat, longitude: lng });
         }
-        catch (error) {
-            logger_1.logger.error(`Error getting elevation profile:`, error.message);
-            return [];
-        }
+        return await this.getElevations(points);
     }
     calculateSlope(elevation1, elevation2, distance) {
         if (distance === 0)
             return 0;
-        return Math.abs(elevation2 - elevation1) / distance * 100;
+        return Math.abs((elevation2 - elevation1) / distance) * 100; // slope as percentage
     }
     async getFloodRiskFactors(latitude, longitude) {
         try {
             const elevation = await this.getElevation(latitude, longitude);
-            if (elevation === null) {
+            if (elevation === null)
                 return null;
-            }
-            const surroundingPoints = [
-                { latitude: latitude + 0.001, longitude: longitude },
-                { latitude: latitude - 0.001, longitude: longitude },
-                { latitude: latitude, longitude: longitude + 0.001 },
-                { latitude: latitude, longitude: longitude - 0.001 },
-            ];
-            const surroundingElevations = await this.getElevations(surroundingPoints);
-            let totalSlope = 0;
-            let slopeCount = 0;
-            if (surroundingElevations.length >= 4) {
-                const pointDistance = 111;
-                surroundingElevations.forEach(surrElevation => {
-                    const slope = this.calculateSlope(elevation, surrElevation.elevation, pointDistance);
-                    totalSlope += slope;
-                    slopeCount++;
-                });
-            }
-            const averageSlope = slopeCount > 0 ? totalSlope / slopeCount : 0;
-            let proximityToWater = 0;
-            if (elevation < 10) {
-                proximityToWater = 0.8;
-            }
-            else if (elevation < 50) {
-                proximityToWater = 0.6;
-            }
-            else if (elevation < 100) {
-                proximityToWater = 0.3;
-            }
-            else {
-                proximityToWater = 0.1;
-            }
+            // Stub values for other factors
             return {
                 elevation,
-                slope: averageSlope,
-                proximity_to_water: proximityToWater,
+                slope: 0, // Would need additional calculation
+                proximity_to_water: 1000, // Stub distance in meters
                 soil_type: 'unknown',
                 land_use: 'unknown'
             };
         }
         catch (error) {
-            logger_1.logger.error(`Error calculating flood risk factors:`, error.message);
+            console.error('Error getting flood risk factors:', error);
             return null;
         }
     }
     analyzeTerrainVulnerability(factors) {
-        let vulnerabilityScore = 0;
-        const riskFactors = [];
+        let vulnerability_score = 0;
+        const risk_factors = [];
         const recommendations = [];
+        // Elevation analysis
         if (factors.elevation < 5) {
-            vulnerabilityScore += 40;
-            riskFactors.push('Very low elevation (< 5m)');
-            recommendations.push('Consider elevated building foundations');
-            recommendations.push('Install flood barriers or levees');
+            vulnerability_score += 3;
+            risk_factors.push('Very low elevation');
+            recommendations.push('Implement flood barriers and elevated structures');
         }
         else if (factors.elevation < 10) {
-            vulnerabilityScore += 25;
-            riskFactors.push('Low elevation (5-10m)');
-            recommendations.push('Prepare flood evacuation plan');
+            vulnerability_score += 2;
+            risk_factors.push('Low elevation');
+            recommendations.push('Regular monitoring and early warning systems');
         }
-        else if (factors.elevation < 20) {
-            vulnerabilityScore += 10;
-            riskFactors.push('Moderate elevation (10-20m)');
-            recommendations.push('Monitor weather forecasts closely');
-        }
+        // Slope analysis
         if (factors.slope > 20) {
-            vulnerabilityScore += 15;
-            riskFactors.push('Steep terrain slope');
-            recommendations.push('Implement erosion control measures');
+            vulnerability_score += 1;
+            risk_factors.push('Steep slope');
+            recommendations.push('Erosion control measures');
         }
-        else if (factors.slope > 10) {
-            vulnerabilityScore += 8;
-            riskFactors.push('Moderate terrain slope');
+        // Proximity to water
+        if (factors.proximity_to_water < 100) {
+            vulnerability_score += 3;
+            risk_factors.push('Very close to water body');
+            recommendations.push('Flood-proofing of buildings');
         }
-        if (factors.proximity_to_water > 0.7) {
-            vulnerabilityScore += 30;
-            riskFactors.push('Very close to water bodies');
-            recommendations.push('Install flood detection sensors');
-            recommendations.push('Create emergency evacuation routes');
+        else if (factors.proximity_to_water < 500) {
+            vulnerability_score += 1;
+            risk_factors.push('Near water body');
+            recommendations.push('Regular drainage maintenance');
         }
-        else if (factors.proximity_to_water > 0.5) {
-            vulnerabilityScore += 20;
-            riskFactors.push('Close to water bodies');
-            recommendations.push('Prepare sandbags and flood barriers');
-        }
-        else if (factors.proximity_to_water > 0.3) {
-            vulnerabilityScore += 10;
-            riskFactors.push('Moderately close to water bodies');
-        }
-        vulnerabilityScore = Math.min(vulnerabilityScore, 100);
         return {
-            vulnerability_score: vulnerabilityScore,
-            risk_factors: riskFactors.length > 0 ? riskFactors : ['No significant terrain risk factors'],
-            recommendations: recommendations.length > 0 ? recommendations : ['Continue monitoring local conditions']
+            vulnerability_score: Math.min(vulnerability_score, 5),
+            risk_factors,
+            recommendations
         };
     }
     async batchFloodRiskAssessment(locations) {
         const results = [];
-        const batchSize = 10;
-        for (let i = 0; i < locations.length; i += batchSize) {
-            const batch = locations.slice(i, i + batchSize);
-            const batchPromises = batch.map(async (location) => {
-                const elevationData = await this.getFloodRiskFactors(location.latitude, location.longitude);
-                const vulnerability = elevationData ? this.analyzeTerrainVulnerability(elevationData) : null;
-                return {
-                    location,
-                    elevation_data: elevationData,
-                    vulnerability
-                };
+        for (const location of locations) {
+            const elevation_data = await this.getFloodRiskFactors(location.latitude, location.longitude);
+            const vulnerability = elevation_data ? this.analyzeTerrainVulnerability(elevation_data) : null;
+            results.push({
+                location,
+                elevation_data,
+                vulnerability
             });
-            const batchResults = await Promise.all(batchPromises);
-            results.push(...batchResults);
-            if (i + batchSize < locations.length) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
         }
         return results;
     }
-    generateCacheKey(points) {
-        const coords = points.map(p => `${p.latitude.toFixed(4)},${p.longitude.toFixed(4)}`).join('|');
-        return `elevation_${coords}`;
+    generateCacheKey(latitude, longitude) {
+        return `elevation_${latitude.toFixed(4)}_${longitude.toFixed(4)}`;
     }
     getCachedData(key) {
         const cached = this.cache.get(key);
-        if (cached && (Date.now() - cached.timestamp) < this.CACHE_DURATION) {
+        if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
             return cached.data;
         }
-        if (cached) {
-            this.cache.delete(key);
-        }
+        this.cache.delete(key);
         return null;
     }
     setCachedData(key, data) {
         this.cache.set(key, { data, timestamp: Date.now() });
-        if (this.cache.size > 200) {
-            const oldestKey = this.cache.keys().next().value;
-            if (oldestKey) {
-                this.cache.delete(oldestKey);
-            }
-        }
     }
     clearCache() {
         this.cache.clear();
-        logger_1.logger.info('Elevation API cache cleared');
     }
 }
-exports.default = new ElevationService();
+exports.default = ElevationService;
 //# sourceMappingURL=elevationService.js.map

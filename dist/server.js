@@ -7,25 +7,31 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const dotenv = require('dotenv');
+// Load environment variables
 dotenv.config();
-const database_1 = require("./config/database");
-const errorHandler_1 = require("./middleware/errorHandler");
-const logger_1 = require("./utils/logger");
+// Import local modules
+const connectDB = require('./config/database');
+const errorHandler = require('./middleware/errorHandler').default;
+const logger = require('./utils/logger').logger || require('./utils/logger');
+// Import routes
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const dashboardRoutes = require('./routes/dashboard');
 const statisticsRoutes = require('./routes/statistics');
 const dataRoutes = require('./routes/data');
 const settingsRoutes = require('./routes/settings');
-const externalApisRoutes = require('./routes/externalApis');
+const externalApisRoutes = require('./routes/externalApis').default;
 const app = express();
-(0, database_1.default)();
+// Connect to MongoDB
+connectDB();
+// Security middleware
 app.use(helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
+// Rate limiting
 const limiter = rateLimit({
-    windowMs: (Number(process.env.RATE_LIMIT_WINDOW) || 15) * 60 * 1000,
-    max: Number(process.env.RATE_LIMIT_MAX) || 100,
+    windowMs: (Number(process.env.RATE_LIMIT_WINDOW) || 15) * 60 * 1000, // 15 minutes default
+    max: Number(process.env.RATE_LIMIT_MAX) || 100, // limit each IP to 100 requests per windowMs
     message: {
         error: 'Too many requests from this IP, please try again later.',
     },
@@ -33,16 +39,21 @@ const limiter = rateLimit({
     legacyHeaders: false,
 });
 app.use('/api/', limiter);
+// CORS configuration
 const corsOptions = {
     origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
     credentials: true,
     optionsSuccessStatus: 200,
 };
 app.use(cors(corsOptions));
+// Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Compression middleware
 app.use(compression());
+// Static files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Health check endpoint
 app.get('/health', (req, res) => {
     const healthData = {
         status: 'OK',
@@ -57,6 +68,7 @@ app.get('/health', (req, res) => {
         data: healthData,
     });
 });
+// API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
@@ -64,6 +76,7 @@ app.use('/api/statistics', statisticsRoutes);
 app.use('/api/data', dataRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/external', externalApisRoutes);
+// 404 handler
 app.use('*', (req, res) => {
     res.status(404).json({
         success: false,
@@ -71,19 +84,22 @@ app.use('*', (req, res) => {
         message: `Cannot ${req.method} ${req.originalUrl}`,
     });
 });
-app.use(errorHandler_1.default);
+// Error handling middleware (must be last)
+app.use(errorHandler);
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {
-    logger_1.logger.info(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+    logger.info(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
 });
+// Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
-    logger_1.logger.error('Unhandled Promise Rejection:', reason);
+    logger.error('Unhandled Promise Rejection:', reason);
     server.close(() => {
         process.exit(1);
     });
 });
+// Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
-    logger_1.logger.error('Uncaught Exception:', err);
+    logger.error('Uncaught Exception:', err);
     process.exit(1);
 });
 exports.default = app;

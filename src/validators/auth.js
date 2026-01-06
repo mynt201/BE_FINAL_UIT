@@ -1,70 +1,66 @@
-const { z } = require('zod');
+const { body } = require('express-validator');
 
-// Auth validation schemas using Zod
-const registerSchema = z.object({
-  body: z.object({
-    username: z.string()
-      .min(3, 'Username must be at least 3 characters')
-      .max(50, 'Username cannot exceed 50 characters')
-      .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores'),
-    email: z.string()
-      .email('Please provide a valid email')
-      .toLowerCase(),
-    password: z.string()
-      .min(6, 'Password must be at least 6 characters long'),
-    fullName: z.string()
-      .max(100, 'Full name cannot exceed 100 characters')
-      .optional(),
-    phone: z.string()
-      .regex(/^[0-9+\-\s()]+$/, 'Please provide a valid phone number')
-      .optional()
-      .or(z.literal('')),
-    address: z.string()
-      .max(500, 'Address cannot exceed 500 characters')
-      .optional()
-      .or(z.literal('')),
-    role: z.enum(['user', 'admin'])
-      .default('user')
-      .optional()
-  })
-});
+// Register validation
+const registerSchema = [
+  body('username')
+    .isLength({ min: 3, max: 50 })
+    .withMessage('Username must be between 3 and 50 characters')
+    .matches(/^[a-zA-Z0-9_]+$/)
+    .withMessage('Username can only contain letters, numbers, and underscores'),
+  body('email')
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail(),
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters long'),
+  body('fullName')
+    .optional()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Full name must be between 2 and 100 characters'),
+  body('phone')
+    .optional()
+    .matches(/^[\+]?[0-9\-\s\(\)]+$/)
+    .withMessage('Please provide a valid phone number'),
+  body('role')
+    .optional()
+    .isIn(['user', 'admin'])
+    .withMessage('Role must be either user or admin')
+];
 
-const loginSchema = z.object({
-  body: z.object({
-    username: z.string()
-      .min(1, 'Username or email is required'),
-    password: z.string()
-      .min(1, 'Password is required')
-  })
-});
+// Login validation
+const loginSchema = [
+  body('username')
+    .notEmpty()
+    .withMessage('Username is required'),
+  body('password')
+    .notEmpty()
+    .withMessage('Password is required')
+];
 
-const refreshTokenSchema = z.object({
-  body: z.object({
-    refreshToken: z.string()
-      .min(1, 'Refresh token is required')
-  })
-});
+// Refresh token validation
+const refreshTokenSchema = [
+  body('refreshToken')
+    .notEmpty()
+    .withMessage('Refresh token is required')
+];
 
 // Validation middleware
-const validate = (schema) => {
+const validate = (validations) => {
   return async (req, res, next) => {
-    try {
-      await schema.parseAsync({
-        body: req.body,
-        query: req.query,
-        params: req.params,
-      });
-      next();
-    } catch (error) {
-      return res.status(400).json({
-        success: false,
-        error: 'Validation failed',
-        details: error.errors.map(err => ({
-          field: err.path.join('.'),
-          message: err.message
-        }))
-      });
+    // Run validations
+    await Promise.all(validations.map(validation => validation.run(req)));
+
+    const errors = require('express-validator').validationResult(req);
+    if (errors.isEmpty()) {
+      return next();
     }
+
+    res.status(400).json({
+      success: false,
+      error: 'Validation failed',
+      details: errors.array()
+    });
   };
 };
 
@@ -74,3 +70,4 @@ module.exports = {
   refreshTokenSchema,
   validate
 };
+

@@ -10,9 +10,9 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 // Import local modules
-import connectDB from './config/database';
-import errorHandler from './middleware/errorHandler';
-import { logger } from './utils/logger';
+const connectDB = require('./config/database');
+const errorHandler = require('./middleware/errorHandler').default;
+const logger = require('./utils/logger').logger || require('./utils/logger');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -21,8 +21,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const statisticsRoutes = require('./routes/statistics');
 const dataRoutes = require('./routes/data');
 const settingsRoutes = require('./routes/settings');
-const externalApisRoutes = require('./routes/externalApis');
-import { IApiResponse } from './types';
+// const externalApisRoutes = require('./ser/externalApis').default;
 
 const app = express();
 
@@ -91,7 +90,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/data', dataRoutes);
 app.use('/api/settings', settingsRoutes);
-app.use('/api/external', externalApisRoutes);
+// app.use('/api/external', externalApisRoutes);
 
 // 404 handler
 app.use('*', (req: any, res: any) => {

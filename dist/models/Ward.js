@@ -1,6 +1,9 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const mongoose_1 = require("mongoose");
+const mongoose_1 = __importDefault(require("mongoose"));
 const wardSchema = new mongoose_1.default.Schema({
     ward_name: {
         type: String,
@@ -71,20 +74,24 @@ const wardSchema = new mongoose_1.default.Schema({
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
 });
+// Index for better performance
 wardSchema.index({ ward_name: 1 });
 wardSchema.index({ district: 1 });
 wardSchema.index({ risk_level: 1 });
 wardSchema.index({ 'coordinates.latitude': 1, 'coordinates.longitude': 1 });
+// Virtual for risk calculation (basic calculation)
 wardSchema.virtual('calculatedRisk').get(function () {
     if (!this.population_density || !this.low_elevation || !this.urban_land) {
         return 0;
     }
+    // Basic risk calculation formula
     const exposure = this.population_density / 1000 + this.urban_land / 100;
     const susceptibility = this.low_elevation + this.urban_land / 10;
     const resilience = this.drainage_capacity || 1;
     const risk = (exposure * susceptibility) / resilience;
-    return Math.min(risk, 5);
+    return Math.min(risk, 5); // Cap at 5
 });
+// Pre-save middleware to update risk level
 wardSchema.pre('save', function (next) {
     if (this.isModified('population_density') ||
         this.isModified('low_elevation') ||
@@ -106,9 +113,11 @@ wardSchema.pre('save', function (next) {
     }
     next();
 });
+// Static method to get wards by risk level
 wardSchema.statics.getByRiskLevel = function (level) {
     return this.find({ risk_level: level, isActive: true });
 };
+// Static method to get statistics
 wardSchema.statics.getStatistics = async function () {
     const stats = await this.aggregate([
         { $match: { isActive: true } },
